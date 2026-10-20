@@ -10,6 +10,31 @@ Chaque depot prive utilise sa propre deploy key GitHub en lecture seule. Ajouter
 
 Les Dockerfiles et les changements applicatifs destines au deploiement doivent etre commits et pushes sur `master` dans leurs depots respectifs. Un changement local non pousse n'est pas visible par le build distant.
 
+## Certificat HTTPS initial
+
+Le nom configure est `eurekaclinique.app`. L'enregistrement DNS A doit pointer vers l'Elastic IP de l'EC2, et le port TCP 80 doit etre autorise dans son groupe de securite pour le challenge HTTP-01. Le port 443 doit aussi etre autorise. Le port SSH doit rester limite a une adresse d'administration.
+
+Avant le premier demarrage du proxy HTTPS, creer le repertoire webroot puis emettre le certificat depuis l'hote EC2 :
+
+```sh
+sudo apt-get update
+sudo apt-get install -y certbot
+docker compose stop proxy
+sudo certbot certonly --standalone \
+  -d eurekaclinique.app --agree-tos --email admin@eureka.com --non-interactive
+docker compose up -d proxy
+```
+
+Pendant la validation initiale, Certbot ecoute temporairement sur le port 80 ; le proxy doit donc etre arrete. Certbot stocke ses certificats sur l'hote dans `/etc/letsencrypt`, que le proxy monte en lecture seule. Ensuite, HTTP ne sert que le challenge ACME et redirige le reste vers HTTPS.
+
+Pour chaque renouvellement manuel, arreter le proxy avant Certbot puis le redemarrer afin qu'il recharge le certificat :
+
+```sh
+docker compose stop proxy
+sudo certbot renew
+docker compose up -d proxy
+```
+
 ## Construire et mettre a jour
 
 Pour chaque deploiement manuel, charger les deux deploy keys dans l'agent SSH et lancer le build avant de redemarrer les services :
